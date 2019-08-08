@@ -1,0 +1,10 @@
+*.pyc
+*.idea
+*.log
+*.json
+*.csv
+*.key
+*.crt
+*.pickle
+venv/
+SCRATCH_PAD/
