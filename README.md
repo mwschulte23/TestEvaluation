@@ -13,6 +13,7 @@ Plan to add:
 * Bayesian A/B testing methods
 
 Example:
-```test_instance = ContinuousTestEval(control_data, test_data)
-test_instance.continuous_pval(n = 10000)```
-
+```
+test_instance = ContinuousTestEval(control_data, test_data)
+test_instance.continuous_pval(n = 10000)
+```
