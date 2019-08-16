@@ -11,17 +11,16 @@ import scipy.stats as stats
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import seaborn as sns
+import multiprocessing
 
-CONTROL = np.random.normal(0, 1, size = 1000)
-TEST = np.random.lognormal(0, 1, size = 1000)
+CONTROL = np.random.normal(0, 1, 1000)
+TEST = np.random.lognormal(0, 1, 1000)
 QUANTILES = np.arange(.1, 1, .2)
 
 class ContinuousTestEval:
     def __init__(self, control, test):
         self.control = control
         self.test = test
-
-        #add assertion to validate input data
 
 
     def __repr__(self):
@@ -39,6 +38,19 @@ class ContinuousTestEval:
         return self.control, self.test
 
 
+    def multiprocess_pval_loop(self, *args):
+        '''
+
+        :param df:
+        :return:
+        '''
+        ctrl_boot = args[0][0].sample(args[0][1], replace=True)
+        test_boot = args[0][0].sample(args[0][2], replace=True)
+        boot_t = np.abs(stats.ttest_ind(ctrl_boot, test_boot)[0])
+
+        return boot_t
+
+
     def continuous_pval(self, n = 1000):
         '''Bootstrapped p-value on continous variable using permutation method
         ----------
@@ -51,21 +63,34 @@ class ContinuousTestEval:
 
         t_stat = stats.ttest_ind(control, test)[0]
         df = pd.DataFrame({'data': np.append(control, test)})
-        diff = []
 
-        for i in range(n):
-            ctrl_boot = df.sample(control.shape[0], replace = True)
-            test_boot = df.sample(test.shape[0], replace = True)
-            boot_t = np.abs(stats.ttest_ind(ctrl_boot, test_boot)[0])
-            diff.append(boot_t)
+        p = multiprocessing.Pool()
+        diff = p.map(self.multiprocess_pval_loop, [(df, control.shape[0], test.shape[0]) for i in range(n)])
 
         p_val = np.mean(np.where(np.abs(t_stat) < diff, 1, 0))
 
         return p_val
 
 
+    def multiprocess_ci_loop(self, *args):
+        '''
+        Multiprocess bootstrapping loop for confidence intervals
+
+        :param c: control data
+        :param t: test data
+        :return: Mean difference value of single bootstrap iteration
+        '''
+
+        boot_c = args[0][0].sample(args[0][0].shape[0], replace = True)
+        boot_t = args[0][1].sample(args[0][1].shape[0], replace = True)
+        boot_diff = boot_t.mean() - boot_c.mean()
+
+        return boot_diff
+
+
     def mean_diff_continuous_ci(self, n = 1000, ci = .95):
-        '''bootstrapped mean difference confidence interval on continous variable
+        '''
+        Bootstrapped mean difference confidence interval on continuous variable
         ----------
         Params:
             control: continuous data array for control group
@@ -77,13 +102,8 @@ class ContinuousTestEval:
         c = pd.DataFrame({'data': control})
         t = pd.DataFrame({'data': test})
 
-        sample_means = []
-
-        for i in range(n):
-            boot_c = c.sample(c.shape[0], replace = True)
-            boot_t = t.sample(t.shape[0], replace = True)
-            boot_diff = boot_t.mean() - boot_c.mean()
-            sample_means.append(boot_diff)
+        p = multiprocessing.Pool()
+        sample_means = p.map(self.multiprocess_ci_loop, [(c, t) for i in range(n)])
 
         alpha = ((1 - ci) * 100) / 2
 
@@ -125,7 +145,7 @@ class ContinuousTestEval:
         out_df = pd.DataFrame({'quantile': ['{:.2f}'.format(i) for i in quantiles],
                                'p-values': pvalues})
 
-        if viz == True:
+        if viz:
             fig, ax = plt.subplots(1, 1, figsize = (6, 6))
 
             sns.kdeplot(control, color = 'r', ax = ax, label = 'Control')
@@ -138,9 +158,24 @@ class ContinuousTestEval:
 
 
 class BinaryTestEval:
-    def __init__(self):
+    def __init__(self, control, test):
         self.control = control
         self.test = test
+
+
+    def __repr__(self):
+        return 'Class for A/B testing on continuous data'
+
+
+    @property
+    def data_prep(self):
+        '''Convert data to numpy arrays for consistency'''
+        if type(self.control) != np.ndarray:
+            self.control = np.array(self.control)
+        if type(self.test) != np.ndarray:
+            self.test = np.array(self.control)
+
+        return self.control, self.test
 
 
     def binary_pval(self):
@@ -186,10 +221,3 @@ class BinaryTestEval:
         lb = tp - cp - t_c
 
         return lb, ub
-
-
-if __name__ == '__main__':
-    test = ContinuousTestEval(CONTROL, TEST)
-    df = test.quant_reg(QUANTILES, viz = True)
-
-    print(test.continuous_pval())
